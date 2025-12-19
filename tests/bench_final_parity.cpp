@@ -65,8 +65,7 @@ Result run_bench(std::size_t num_producers, std::uint64_t msgs_per_producer) {
     producers.reserve(num_producers);
     consumers.reserve(num_producers);
 
-    std::vector<std::atomic<std::uint64_t>> consumed(num_producers);
-    for (auto& c : consumed) c.store(0, std::memory_order_relaxed);
+    std::vector<std::uint64_t> consumed(num_producers, 0);
 
     // Register producers
     std::vector<ChannelT::Producer> regs;
@@ -84,10 +83,11 @@ Result run_bench(std::size_t num_producers, std::uint64_t msgs_per_producer) {
         auto ring = regs[i].ring;
         consumers.emplace_back([ring, i, &consumed] {
             pin_thread(i);
+            std::uint64_t local = 0;
             struct Handler {
-                std::atomic<std::uint64_t>* counter;
-                inline void process(const std::uint32_t*) { counter->fetch_add(1, std::memory_order_relaxed); }
-            } handler{.counter = &consumed[i]};
+                std::uint64_t* counter;
+                inline void process(const std::uint32_t*) { ++(*counter); }
+            } handler{.counter = &local};
 
             while (true) {
                 auto n = ring->consume_batch(handler);
@@ -96,6 +96,7 @@ Result run_bench(std::size_t num_producers, std::uint64_t msgs_per_producer) {
                     std::this_thread::yield();
                 }
             }
+            consumed[i] = local;
         });
     }
 
@@ -133,7 +134,7 @@ Result run_bench(std::size_t num_producers, std::uint64_t msgs_per_producer) {
     const auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
 
     std::uint64_t total = 0;
-    for (auto& c : consumed) total += c.load(std::memory_order_relaxed);
+    for (auto& c : consumed) total += c;
 
     const double rate = static_cast<double>(total) / static_cast<double>(ns); // msgs per ns
     return {.rate_billion_per_s = rate * 1e9 / 1e9}; // B msg/s

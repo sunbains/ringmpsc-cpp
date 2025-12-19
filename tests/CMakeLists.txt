@@ -8,3 +8,6 @@ target_link_libraries(bench_final PRIVATE ringmpsc)
 
 add_executable(bench_final_parity bench_final_parity.cpp)
 target_link_libraries(bench_final_parity PRIVATE ringmpsc)
+
+add_executable(bench_final_coroutine bench_final_coroutine.cpp)
+target_link_libraries(bench_final_coroutine PRIVATE ringmpsc)

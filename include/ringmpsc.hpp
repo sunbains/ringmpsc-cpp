@@ -251,31 +251,43 @@ public:
 
     template <typename Handler>
     std::size_t consume_batch(Handler&& handler) noexcept(noexcept(handler.process(static_cast<const T*>(nullptr)))) {
-        const auto head = head_.load(std::memory_order_relaxed);
+        auto head = head_.load(std::memory_order_relaxed);
         const auto tail = tail_.load(std::memory_order_acquire);
 
-        const auto avail = tail - head;
+        auto avail = tail - head;
         if (avail == 0) {
             return 0;
         }
 
-        auto pos = head;
-        std::size_t count = 0;
-        while (pos != tail) {
-            const auto idx = pos & MASK;
-            handler.process(buffer_.data() + idx);
-            ++pos;
-            ++count;
+        auto idx = head & MASK;
+        const auto* data = buffer_.data();
+
+        while (avail != 0) {
+            const auto contiguous = std::min<std::uint64_t>(avail, CAPACITY - idx);
+            const auto* ptr = data + idx;
+            const auto* end = ptr + contiguous;
+
+            // Prefetch the next chunk if we will wrap.
+            if (avail > contiguous) {
+                detail::prefetch(data, false);
+            }
+
+            for (; ptr != end; ++ptr) {
+                handler.process(ptr);
+            }
+
+            avail -= contiguous;
+            idx = 0;
         }
 
         head_.store(tail, std::memory_order_release);
 
         if constexpr (config.enable_metrics) {
-            metrics_.messages_received += count;
+            metrics_.messages_received += detail::narrow_cast<std::size_t>(tail - head);
             metrics_.batches_received += 1;
         }
 
-        return count;
+        return detail::narrow_cast<std::size_t>(tail - head);
     }
 
     template <void (*Callback)(const T*)>

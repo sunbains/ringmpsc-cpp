@@ -20,6 +20,10 @@ cmake --build build --target test_ringmpsc
 ctest --output-on-failure --test-dir build
 ```
 
+## Benchmarks
+- `tests/bench_final`: scaled benchmark. Usage: `./build/tests/bench_final <msgs_per_producer> [batch_size]`. Defaults: msgs `1_000_000`, batch `8192` (override batch via `BENCH_BATCH`).
+- `tests/bench_final_parity`: parity benchmark mirroring Zig setup. Usage: `./build/tests/bench_final_parity <msgs_per_producer>`.
+
 ## Usage
 ```cpp
 #include <ringmpsc.hpp>
